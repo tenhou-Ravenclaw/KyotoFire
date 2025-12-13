@@ -11,9 +11,9 @@ export const CONFIG = {
     P1_EXTINGUISH_COST: 300,
     P2_COOLDOWN_BASE: 3.0,
     HEAT_THRESHOLD: 100,
-    HEAT_TRANSFER_RATE: 20, // Heat added per second from neighbor
-    HEAT_DECAY: 5,         // Natural cooling
-    FIRE_SPREAD_RANGE: 0.000000000001,   // Distance for fire to spread (meters for city model)
+    HEAT_TRANSFER_RATE: 5, // Heat added per second from neighbor
+    HEAT_DECAY: 3,         // Natural cooling
+    FIRE_SPREAD_RANGE: 8.0,   // Distance for fire to spread (meters, before scaling) → 4.0 units after scale
     DIFFICULTY_RAMP: true,   // Enable difficulty curve
     
     // City Model Settings (GLB)

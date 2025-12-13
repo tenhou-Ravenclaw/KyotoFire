@@ -94,6 +94,10 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
         const raycaster = new THREE.Raycaster();
         const clock = new THREE.Clock();
         const geometry = new THREE.BoxGeometry(1, 1, 1);
+        
+        // Reusable vectors for performance
+        const tempVec1 = new THREE.Vector3();
+        const tempVec2 = new THREE.Vector3();
 
         // Inputs
         const keys = { w: false, a: false, s: false, d: false, space: false, shift: false };
@@ -172,6 +176,55 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
                     GameState.stats.totalBuildings = buildings.length;
                     buildingsRef.current = buildings;
                     
+                    // Force update world matrices for all buildings
+                    scene.updateMatrixWorld(true);
+                    
+                    // Cache world positions for performance
+                    buildings.forEach(b => {
+                        const worldPos = new THREE.Vector3();
+                        b.getWorldPosition(worldPos);
+                        b.userData.worldPosition = worldPos.clone();
+                    });
+                    
+                    // Debug: Check building positions and distances
+                    if (buildings.length > 1) {
+                        let minDist = Infinity;
+                        let maxDist = 0;
+                        let sampleCount = Math.min(50, buildings.length);
+                        
+                        // Log first few building positions
+                        console.log("Sample building positions:");
+                        for (let i = 0; i < Math.min(5, buildings.length); i++) {
+                            const pos = buildings[i].position;
+                            const worldPos = buildings[i].userData.worldPosition;
+                            console.log(`  Building ${i}: local(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}) world(${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)})`);
+                        }
+                        
+                        for (let i = 0; i < sampleCount; i++) {
+                            const b1 = buildings[i];
+                            const pos1 = b1.userData.worldPosition;
+                            
+                            for (let j = i + 1; j < Math.min(i + 10, buildings.length); j++) {
+                                const b2 = buildings[j];
+                                const pos2 = b2.userData.worldPosition;
+                                
+                                const dist = pos1.distanceTo(pos2);
+                                if (dist > 0.01 && dist < minDist) minDist = dist;  // Ignore zero distances
+                                if (dist > maxDist) maxDist = dist;
+                            }
+                        }
+                        const fireRange = CONFIG.FIRE_SPREAD_RANGE * CONFIG.CITY_SCALE;
+                        console.log(`Building distances (world) - Min: ${minDist.toFixed(2)}, Max: ${maxDist.toFixed(2)}, Fire Range: ${fireRange.toFixed(2)}`);
+                        
+                        if (minDist < fireRange) {
+                            console.warn(`⚠️ WARNING: Fire range (${fireRange.toFixed(2)}) is LARGER than min building distance (${minDist.toFixed(2)})!`);
+                            console.warn(`   This means many buildings will spread fire immediately!`);
+                            console.warn(`   Recommended: Set FIRE_SPREAD_RANGE to ${(minDist / CONFIG.CITY_SCALE * 0.8).toFixed(2)} or less`);
+                        } else {
+                            console.log(`✓ Fire range is smaller than min building distance`);
+                        }
+                    }
+                    
                     // Calculate and display field boundaries
                     if (buildings.length > 0) {
                         const bbox = new THREE.Box3();
@@ -208,7 +261,18 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
                         const boundaryLine = new THREE.Line(lineGeometry, lineMaterial);
                         scene.add(boundaryLine);
                         
+                        // Calculate area and building density
+                        const fieldWidth = bbox.max.x - bbox.min.x;
+                        const fieldDepth = bbox.max.z - bbox.min.z;
+                        const fieldArea = fieldWidth * fieldDepth;
+                        const buildingDensity = buildings.length / fieldArea;
+                        const avgSpacing = Math.sqrt(1 / buildingDensity);
+                        
                         console.log(`Field boundaries: X(${bbox.min.x.toFixed(1)} to ${bbox.max.x.toFixed(1)}), Z(${bbox.min.z.toFixed(1)} to ${bbox.max.z.toFixed(1)})`);
+                        console.log(`Field size: ${fieldWidth.toFixed(1)} × ${fieldDepth.toFixed(1)} = ${fieldArea.toFixed(0)} units²`);
+                        console.log(`Buildings: ${buildings.length}, Density: ${buildingDensity.toFixed(4)} buildings/unit², Avg spacing: ${avgSpacing.toFixed(2)} units`);
+                        console.log(`Current fire range: ${(CONFIG.FIRE_SPREAD_RANGE * CONFIG.CITY_SCALE).toFixed(2)} units`);
+                        console.log(`Recommended fire range: ${(avgSpacing * 0.3).toFixed(2)} to ${(avgSpacing * 0.8).toFixed(2)} units (30%-80% of avg spacing)`);
                     }
                     
                     if (onLoadProgress) onLoadProgress(100);
@@ -257,6 +321,9 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
             GameState.stats.totalBuildings = buildings.length;
             buildingsRef.current = buildings;
             
+            // Force update world matrices for random city
+            scene.updateMatrixWorld(true);
+            
             // Add boundary for random city
             const fieldSize = CONFIG.GRID_SIZE * (CONFIG.CUBE_SIZE + CONFIG.GAP);
             const points = [
@@ -276,6 +343,9 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
         };
 
         const setupBuildingData = (mesh, id) => {
+            const worldPos = new THREE.Vector3();
+            mesh.getWorldPosition(worldPos);
+            
             mesh.userData = {
                 heat: 0,
                 isBurnt: false,
@@ -283,7 +353,8 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
                 baseColor: mesh.material.color.getHex(),
                 id: id,
                 originalHeight: mesh.scale.y,
-                originalY: mesh.position.y
+                originalY: mesh.position.y,
+                worldPosition: worldPos.clone()
             };
         };
 
@@ -345,6 +416,12 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
                 const range = CONFIG.USE_CITY_MODEL ? (CONFIG.FIRE_SPREAD_RANGE * CONFIG.CITY_SCALE) : (CONFIG.CUBE_SIZE * 1.5);
                 const burningBuildings = [];
                 
+                // Debug: Log fire spread range once
+                if (!window._fireRangeLogged) {
+                    console.log(`Fire spread range: ${range.toFixed(2)} units (FIRE_SPREAD_RANGE: ${CONFIG.FIRE_SPREAD_RANGE} × CITY_SCALE: ${CONFIG.CITY_SCALE})`);
+                    window._fireRangeLogged = true;
+                }
+                
                 // Pass 1: Count burnt, collect burning buildings, update heat decay
                 for (let i = 0; i < buildings.length; i++) {
                     const b = buildings[i];
@@ -356,7 +433,7 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
                         
                         // Emit particles (reduced frequency)
                         if (Math.random() < 0.15) {
-                            const firePos = b.position.clone();
+                            const firePos = data.worldPosition.clone();
                             firePos.y += b.scale.y * 0.5;
                             fireParticles.emit(firePos, 2);
                         }
@@ -379,16 +456,18 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
                     }
                 }
                 
-                // Pass 2: Only spread heat from burning buildings
+                // Pass 2: Only spread heat from burning buildings (use cached world position)
                 for (let i = 0; i < burningBuildings.length; i++) {
                     const b = burningBuildings[i];
-                    const bPos = b.position;
+                    const bPos = b.userData.worldPosition;
                     
                     for (let j = 0; j < buildings.length; j++) {
                         const target = buildings[j];
                         if (target.userData.isBurnt || target.userData.isWall) continue;
                         
-                        const dist = bPos.distanceTo(target.position);
+                        const targetPos = target.userData.worldPosition;
+                        const dist = bPos.distanceTo(targetPos);
+                        
                         if (dist < range) {
                             target.userData.heat += CONFIG.HEAT_TRANSFER_RATE * delta;
                         }
