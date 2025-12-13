@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Urban Fire PvP: Kyoto Simulation</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- UI Layer -->
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div class="p1-panel">
+                <div class="stat-label">Player 1 (Defense)</div>
+                <div class="stat-value" id="p1-budget">¥3,000</div>
+                <div class="controls-hint">Left Click: Wall (¥100) / Extinguish (¥300)</div>
+            </div>
+            
+            <div class="p2-panel">
+                <div class="stat-label">Player 2 (Offense)</div>
+                <div class="stat-value" id="p2-cooldown">READY</div>
+                <div class="controls-hint">Right Click: Ignite</div>
+            </div>
+        </div>
+
+        <div class="center-panel">
+            <div id="phase-label">SETUP PHASE</div>
+            <div id="timer">15</div>
+            <div id="damage-bar-container">
+                <div id="damage-bar"></div>
+            </div>
+            <div id="damage-text">Damage: 0%</div>
+        </div>
+
+        <div class="hud-bottom">
+            <!-- Additional info can go here -->
+        </div>
+    </div>
+
+    <!-- Overlay Screen (Start/Result) -->
+    <div id="overlay-msg" style="display: flex; flex-direction: column;">
+        <div id="overlay-title">KYOTO FIRE</div>
+        <div id="overlay-subtitle">P1: Build Walls | P2: Burn Everything</div>
+        <button id="start-btn">START GAME</button>
+    </div>
+
+    <!-- Import Map: Defines where to load 'three' from -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/examples/jsm/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <!-- Module Entry Point -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
