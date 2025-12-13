@@ -252,6 +252,23 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
             }
             GameState.stats.totalBuildings = buildings.length;
             buildingsRef.current = buildings;
+            
+            // Add boundary for random city
+            const fieldSize = CONFIG.GRID_SIZE * (CONFIG.CUBE_SIZE + CONFIG.GAP);
+            const points = [
+                new THREE.Vector3(-fieldSize/2, 0, -fieldSize/2),
+                new THREE.Vector3(fieldSize/2, 0, -fieldSize/2),
+                new THREE.Vector3(fieldSize/2, 0, fieldSize/2),
+                new THREE.Vector3(-fieldSize/2, 0, fieldSize/2),
+                new THREE.Vector3(-fieldSize/2, 0, -fieldSize/2)
+            ];
+            const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+            const lineMaterial = new THREE.LineBasicMaterial({ 
+                color: 0xff0000, 
+                linewidth: 3 
+            });
+            const boundaryLine = new THREE.Line(lineGeometry, lineMaterial);
+            scene.add(boundaryLine);
         };
 
         const setupBuildingData = (mesh, id) => {
