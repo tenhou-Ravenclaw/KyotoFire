@@ -1,6 +1,7 @@
 {
-  "name": "kyoto-fire-next",
+  "name": "inferno-city",
   "version": "1.0.0",
+  "description": "Inferno City - A local PvP fire spread simulation game set in 3D Kyoto city",
   "private": true,
   "scripts": {
     "dev": "next dev",

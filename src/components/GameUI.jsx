@@ -86,8 +86,8 @@ export default function GameUI({ isPlaying, onStart, result, isLoaded, loadProgr
             {/* OVERLAY (Start / Result / Loading) */}
             {(!isPlaying || result) && (
                 <div className="overlay pointer-auto">
-                    <div className="title-lg">KYOTO FIRE</div>
-                    <div className="subtitle">P1: Build Walls | P2: Burn Everything</div>
+                    <div className="title-lg">INFERNO CITY</div>
+                    <div className="subtitle">炎上都市 | P1: Build Walls | P2: Burn Everything</div>
                     
                     {result ? (
                         <div className="result-box">
