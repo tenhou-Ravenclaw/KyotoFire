@@ -13,11 +13,17 @@ export const CONFIG = {
     HEAT_THRESHOLD: 100,
     HEAT_TRANSFER_RATE: 20, // Heat added per second from neighbor
     HEAT_DECAY: 5,         // Natural cooling
+    FIRE_SPREAD_RANGE: 0.000000000001,   // Distance for fire to spread (meters for city model)
     DIFFICULTY_RAMP: true,   // Enable difficulty curve
     
     // City Model Settings (GLB)
     USE_CITY_MODEL: true,   // Set to true to load from file
-    CITY_MODEL_PATH: '/assets/city.glb', // Path relative to public folder
-    CITY_SCALE: 1.0,        
+    CITY_MODEL_PATHS: [
+        '/assets/glb/52353690_bldg_6697_op/52353690_bldg_6697_op.glb',
+        '/assets/glb/52353691_bldg_6697_op/52353691_bldg_6697_op.glb',
+        '/assets/glb/52354600_bldg_6697_op/52354600_bldg_6697_op.glb',
+        '/assets/glb/52354601_bldg_6697_op/52354601_bldg_6697_op.glb'
+    ], // Paths relative to public folder
+    CITY_SCALE: 0.5,        // PLATEAU data is in meters, scale down
     CITY_OFFSET_Y: 0        
 };

@@ -32,6 +32,7 @@ export default function Home() {
     <main style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', backgroundColor: '#000' }}>
       {/* 3D Layer - Always render to allow loading in background */}
       <ThreeCanvas 
+        isPlaying={isPlaying}
         onUpdate={() => {}} 
         onGameEnd={handleGameEnd}
         onLoadProgress={handleLoadProgress}

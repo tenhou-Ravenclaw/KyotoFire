@@ -10,10 +10,12 @@ import { GameState } from '../lib/state';
 import { AudioController } from '../lib/audio';
 import { ParticleSystem } from '../lib/particles';
 
-export default function ThreeCanvas({ onUpdate, onGameEnd, onLoadProgress }) {
+export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProgress }) {
     const mountRef = useRef(null);
     const sceneRef = useRef(null);
     const isInitialized = useRef(false);
+    const buildingsRef = useRef([]);
+    const fireParticlesRef = useRef(null);
     
     useEffect(() => {
         if (!mountRef.current || isInitialized.current) return;
@@ -22,7 +24,7 @@ export default function ThreeCanvas({ onUpdate, onGameEnd, onLoadProgress }) {
         // --- INIT THREE.JS ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87ceeb); // Sky blue
-        scene.fog = new THREE.Fog(0x87ceeb, 50, 300);
+        scene.fog = new THREE.Fog(0x87ceeb, 100, 500);
         sceneRef.current = scene;
 
         // Stats
@@ -34,12 +36,13 @@ export default function ThreeCanvas({ onUpdate, onGameEnd, onLoadProgress }) {
         mountRef.current.appendChild(stats.dom);
 
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
-        camera.position.set(0, 50, 50);
+        camera.position.set(0, 100, 100);
         camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.domElement.style.width = '100%';
         renderer.domElement.style.height = '100%';
         renderer.domElement.style.position = 'absolute';
@@ -50,17 +53,24 @@ export default function ThreeCanvas({ onUpdate, onGameEnd, onLoadProgress }) {
         mountRef.current.appendChild(renderer.domElement);
 
         // Lights
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
         scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight(0xffffee, 1.2);
-        dirLight.position.set(20, 50, 20);
+        const dirLight = new THREE.DirectionalLight(0xffffee, 1.5);
+        dirLight.position.set(100, 200, 100);
         dirLight.castShadow = true;
-        dirLight.shadow.mapSize.width = 2048;
-        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.mapSize.width = 4096;
+        dirLight.shadow.mapSize.height = 4096;
+        dirLight.shadow.camera.left = -200;
+        dirLight.shadow.camera.right = 200;
+        dirLight.shadow.camera.top = 200;
+        dirLight.shadow.camera.bottom = -200;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 500;
+        dirLight.shadow.bias = -0.0001;
         scene.add(dirLight);
 
         // Ground Plane 
-        const groundGeo = new THREE.PlaneGeometry(2000, 2000);
+        const groundGeo = new THREE.PlaneGeometry(5000, 5000);
         const groundMat = new THREE.MeshStandardMaterial({ color: 0x8fbc8f, roughness: 0.8 }); // Dark sea green (grass-like)
         const ground = new THREE.Mesh(groundGeo, groundMat);
         ground.rotation.x = -Math.PI / 2;
@@ -69,12 +79,14 @@ export default function ThreeCanvas({ onUpdate, onGameEnd, onLoadProgress }) {
         scene.add(ground);
 
         // Grid Helper
-        const gridHelper = new THREE.GridHelper(200, 50, 0xaaaaaa, 0x666666);
+        const gridHelper = new THREE.GridHelper(500, 100, 0xaaaaaa, 0x666666);
         scene.add(gridHelper);
 
         // Game Objects
         let buildings = [];
         let fireParticles = new ParticleSystem(scene);
+        buildingsRef.current = buildings;
+        fireParticlesRef.current = fireParticles;
         const raycaster = new THREE.Raycaster();
         const clock = new THREE.Clock();
         const geometry = new THREE.BoxGeometry(1, 1, 1);
@@ -94,42 +106,113 @@ export default function ThreeCanvas({ onUpdate, onGameEnd, onLoadProgress }) {
                 dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
                 loader.setDRACOLoader(dracoLoader);
 
-                loader.load(CONFIG.CITY_MODEL_PATH, (gltf) => {
-                    const model = gltf.scene;
-                    model.scale.set(CONFIG.CITY_SCALE, CONFIG.CITY_SCALE, CONFIG.CITY_SCALE);
-                    model.position.y = CONFIG.CITY_OFFSET_Y;
-                    scene.add(model);
-                    model.traverse((child) => {
-                        if (child.isMesh) {
-                            if (!child.material.isMeshPhongMaterial) {
-                                child.material = new THREE.MeshPhongMaterial({
-                                    color: child.material.color || 0x888888,
-                                    map: child.material.map || null
+                const modelPaths = CONFIG.CITY_MODEL_PATHS || [CONFIG.CITY_MODEL_PATH];
+                let loadedCount = 0;
+                let totalFiles = modelPaths.length;
+                
+                const loadPromises = modelPaths.map((path) => {
+                    return new Promise((resolve, reject) => {
+                        loader.load(
+                            path,
+                            (gltf) => {
+                                const model = gltf.scene;
+                                model.scale.set(CONFIG.CITY_SCALE, CONFIG.CITY_SCALE, CONFIG.CITY_SCALE);
+                                model.position.y = CONFIG.CITY_OFFSET_Y;
+                                scene.add(model);
+                                
+                                model.traverse((child) => {
+                                    if (child.isMesh) {
+                                        if (!child.material.isMeshPhongMaterial) {
+                                            child.material = new THREE.MeshPhongMaterial({
+                                                color: child.material.color || 0xdddddd,
+                                                map: child.material.map || null,
+                                                shininess: 5
+                                            });
+                                        } else {
+                                            child.material = child.material.clone();
+                                        }
+                                        child.castShadow = true;
+                                        child.receiveShadow = true;
+                                        
+                                        // Add wireframe edges for better visibility
+                                        const edges = new THREE.EdgesGeometry(child.geometry);
+                                        const lineMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
+                                        const wireframe = new THREE.LineSegments(edges, lineMaterial);
+                                        child.add(wireframe);
+                                        
+                                        setupBuildingData(child, `blg-${buildings.length}`);
+                                        buildings.push(child);
+                                    }
                                 });
-                            } else {
-                                child.material = child.material.clone();
+                                
+                                loadedCount++;
+                                if (onLoadProgress) {
+                                    onLoadProgress((loadedCount / totalFiles) * 100);
+                                }
+                                resolve();
+                            },
+                            undefined,
+                            (err) => {
+                                console.error(`Failed to load ${path}`, err);
+                                loadedCount++;
+                                if (onLoadProgress) {
+                                    onLoadProgress((loadedCount / totalFiles) * 100);
+                                }
+                                reject(err);
                             }
-                            child.castShadow = true;
-                            child.receiveShadow = true;
-                            setupBuildingData(child, `blg-${buildings.length}`);
-                            buildings.push(child);
-                        }
+                        );
                     });
+                });
+
+                Promise.allSettled(loadPromises).then(() => {
                     GameState.stats.totalBuildings = buildings.length;
-                    if (onLoadProgress) onLoadProgress(100);
-                }, 
-                (xhr) => {
-                    if (xhr.total > 0 && onLoadProgress) {
-                        onLoadProgress((xhr.loaded / xhr.total) * 100);
+                    buildingsRef.current = buildings;
+                    
+                    // Calculate and display field boundaries
+                    if (buildings.length > 0) {
+                        const bbox = new THREE.Box3();
+                        buildings.forEach(b => bbox.expandByObject(b));
+                        
+                        // Add boundary box
+                        const size = bbox.getSize(new THREE.Vector3());
+                        const center = bbox.getCenter(new THREE.Vector3());
+                        
+                        const boundaryGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+                        const boundaryMaterial = new THREE.MeshBasicMaterial({
+                            color: 0xff0000,
+                            wireframe: true,
+                            transparent: true,
+                            opacity: 0.3
+                        });
+                        const boundaryBox = new THREE.Mesh(boundaryGeometry, boundaryMaterial);
+                        boundaryBox.position.copy(center);
+                        scene.add(boundaryBox);
+                        
+                        // Add ground-level boundary lines
+                        const points = [
+                            new THREE.Vector3(bbox.min.x, 0, bbox.min.z),
+                            new THREE.Vector3(bbox.max.x, 0, bbox.min.z),
+                            new THREE.Vector3(bbox.max.x, 0, bbox.max.z),
+                            new THREE.Vector3(bbox.min.x, 0, bbox.max.z),
+                            new THREE.Vector3(bbox.min.x, 0, bbox.min.z)
+                        ];
+                        const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                        const lineMaterial = new THREE.LineBasicMaterial({ 
+                            color: 0xff0000, 
+                            linewidth: 3 
+                        });
+                        const boundaryLine = new THREE.Line(lineGeometry, lineMaterial);
+                        scene.add(boundaryLine);
+                        
+                        console.log(`Field boundaries: X(${bbox.min.x.toFixed(1)} to ${bbox.max.x.toFixed(1)}), Z(${bbox.min.z.toFixed(1)} to ${bbox.max.z.toFixed(1)})`);
                     }
-                },
-                (err) => {
-                    console.error("Failed to load city GLB", err);
-                    createRandomCity();
+                    
                     if (onLoadProgress) onLoadProgress(100);
+                    console.log(`Loaded ${buildings.length} buildings from ${totalFiles} GLB files`);
                 });
             } else {
                 createRandomCity();
+                buildingsRef.current = buildings;
                 if (onLoadProgress) onLoadProgress(100);
             }
         };
@@ -153,12 +236,22 @@ export default function ThreeCanvas({ onUpdate, onGameEnd, onLoadProgress }) {
                     );
                     mesh.castShadow = true;
                     mesh.receiveShadow = true;
+                    
+                    // Add wireframe edges for better visibility
+                    const edges = new THREE.EdgesGeometry(geometry);
+                    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
+                    const wireframe = new THREE.LineSegments(edges, lineMaterial);
+                    wireframe.scale.set(CONFIG.CUBE_SIZE, height, CONFIG.CUBE_SIZE);
+                    wireframe.position.copy(mesh.position);
+                    scene.add(wireframe);
+                    
                     setupBuildingData(mesh, `${x}-${z}`);
                     scene.add(mesh);
                     buildings.push(mesh);
                 }
             }
             GameState.stats.totalBuildings = buildings.length;
+            buildingsRef.current = buildings;
         };
 
         const setupBuildingData = (mesh, id) => {
@@ -167,7 +260,9 @@ export default function ThreeCanvas({ onUpdate, onGameEnd, onLoadProgress }) {
                 isBurnt: false,
                 isWall: false,
                 baseColor: mesh.material.color.getHex(),
-                id: id
+                id: id,
+                originalHeight: mesh.scale.y,
+                originalY: mesh.position.y
             };
         };
 
@@ -179,13 +274,13 @@ export default function ThreeCanvas({ onUpdate, onGameEnd, onLoadProgress }) {
             const delta = clock.getDelta();
 
             // Camera
-            const moveSpeed = 20.0 * delta;
+            const moveSpeed = 100.0 * delta;
             if (keys.w) camera.position.z -= moveSpeed;
             if (keys.s) camera.position.z += moveSpeed;
             if (keys.a) camera.position.x -= moveSpeed;
             if (keys.d) camera.position.x += moveSpeed;
-            if (keys.space && camera.position.y > 5) camera.position.y -= moveSpeed;
-            if (keys.shift && camera.position.y < 100) camera.position.y += moveSpeed;
+            if (keys.space && camera.position.y > 10) camera.position.y -= moveSpeed;
+            if (keys.shift && camera.position.y < 300) camera.position.y += moveSpeed;
 
             if (GameState.phase === 'SETUP' || GameState.phase === 'BATTLE') {
                 updateGame(delta);
@@ -226,7 +321,7 @@ export default function ThreeCanvas({ onUpdate, onGameEnd, onLoadProgress }) {
                 if (GameState.p2.cooldown > 0) GameState.p2.cooldown -= delta;
 
                 let currentBurnt = 0;
-                const range = CONFIG.CUBE_SIZE * 1.5;
+                const range = CONFIG.USE_CITY_MODEL ? (CONFIG.FIRE_SPREAD_RANGE * CONFIG.CITY_SCALE) : (CONFIG.CUBE_SIZE * 1.5);
                 
                 buildings.forEach(b => {
                     const data = b.userData;
@@ -390,6 +485,34 @@ export default function ThreeCanvas({ onUpdate, onGameEnd, onLoadProgress }) {
             renderer.dispose();
         };
     }, []); 
+
+    // Watch isPlaying and reset game when it changes to true
+    useEffect(() => {
+        if (isPlaying && buildingsRef.current.length > 0) {
+            // Reset all buildings
+            buildingsRef.current.forEach(building => {
+                const data = building.userData;
+                data.heat = 0;
+                data.isBurnt = false;
+                data.isWall = false;
+                
+                // Reset visual state
+                building.material.color.setHex(data.baseColor);
+                
+                // Reset scale/position to original
+                building.scale.y = data.originalHeight;
+                building.position.y = data.originalY;
+            });
+            
+            // Reset particles
+            if (fireParticlesRef.current) {
+                fireParticlesRef.current.reset();
+            }
+            
+            // Reset game state
+            GameState.reset();
+        }
+    }, [isPlaying]);
 
     return <div ref={mountRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }} />;
 }
