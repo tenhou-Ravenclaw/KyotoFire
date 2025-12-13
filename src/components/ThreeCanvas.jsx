@@ -39,10 +39,14 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
         camera.position.set(0, 100, 100);
         camera.lookAt(0, 0, 0);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const renderer = new THREE.WebGLRenderer({ 
+            antialias: true,
+            powerPreference: "high-performance"
+        });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.shadowMap.type = THREE.PCFShadowMap;  // Changed from PCFSoftShadowMap for performance
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));  // Limit pixel ratio
         renderer.domElement.style.width = '100%';
         renderer.domElement.style.height = '100%';
         renderer.domElement.style.position = 'absolute';
@@ -58,8 +62,8 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
         const dirLight = new THREE.DirectionalLight(0xffffee, 1.5);
         dirLight.position.set(100, 200, 100);
         dirLight.castShadow = true;
-        dirLight.shadow.mapSize.width = 4096;
-        dirLight.shadow.mapSize.height = 4096;
+        dirLight.shadow.mapSize.width = 2048;  // Reduced from 4096
+        dirLight.shadow.mapSize.height = 2048;
         dirLight.shadow.camera.left = -200;
         dirLight.shadow.camera.right = 200;
         dirLight.shadow.camera.top = 200;
@@ -339,19 +343,19 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
 
                 let currentBurnt = 0;
                 const range = CONFIG.USE_CITY_MODEL ? (CONFIG.FIRE_SPREAD_RANGE * CONFIG.CITY_SCALE) : (CONFIG.CUBE_SIZE * 1.5);
+                const burningBuildings = [];
                 
-                buildings.forEach(b => {
+                // Pass 1: Count burnt, collect burning buildings, update heat decay
+                for (let i = 0; i < buildings.length; i++) {
+                    const b = buildings[i];
                     const data = b.userData;
+                    
                     if (data.isBurnt) {
                         currentBurnt++;
-                        buildings.forEach(target => {
-                            if (b === target || target.userData.isBurnt || target.userData.isWall) return;
-                            if (b.position.distanceTo(target.position) < range) {
-                                target.userData.heat += CONFIG.HEAT_TRANSFER_RATE * delta;
-                            }
-                        });
+                        burningBuildings.push(b);
                         
-                        if (Math.random() < 0.3) {
+                        // Emit particles (reduced frequency)
+                        if (Math.random() < 0.15) {
                             const firePos = b.position.clone();
                             firePos.y += b.scale.y * 0.5;
                             fireParticles.emit(firePos, 2);
@@ -361,15 +365,35 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
                         data.heat = CONFIG.HEAT_THRESHOLD;
                         b.material.color.setHex(0x220000);
                         b.scale.y *= 0.8;
+                        currentBurnt++;
                     } else if (data.heat > 0) {
                         data.heat -= CONFIG.HEAT_DECAY * delta;
                         if (data.heat < 0) data.heat = 0;
-                        if (!data.isWall) {
+                        
+                        // Update color only if heat changed significantly
+                        if (!data.isWall && !data.lastColorUpdate || Math.abs(data.heat - data.lastColorUpdate) > 5) {
                             const t = data.heat / CONFIG.HEAT_THRESHOLD;
                             b.material.color.setRGB(0.5 + t*0.5, 0.5 * (1-t), 0.5 * (1-t));
+                            data.lastColorUpdate = data.heat;
                         }
                     }
-                });
+                }
+                
+                // Pass 2: Only spread heat from burning buildings
+                for (let i = 0; i < burningBuildings.length; i++) {
+                    const b = burningBuildings[i];
+                    const bPos = b.position;
+                    
+                    for (let j = 0; j < buildings.length; j++) {
+                        const target = buildings[j];
+                        if (target.userData.isBurnt || target.userData.isWall) continue;
+                        
+                        const dist = bPos.distanceTo(target.position);
+                        if (dist < range) {
+                            target.userData.heat += CONFIG.HEAT_TRANSFER_RATE * delta;
+                        }
+                    }
+                }
 
                 GameState.stats.burntBuildings = currentBurnt;
                 GameState.stats.damagePercent = (currentBurnt / GameState.stats.totalBuildings) * 100;
