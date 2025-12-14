@@ -68,12 +68,12 @@ export class ParticleSystem {
             
             const spread = 0.5;
             this.positions[p.index * 3] = position.x + (Math.random() - 0.5) * spread;
-            this.positions[p.index * 3 + 1] = position.y + (Math.random() * 0.5);
+            this.positions[p.index * 3 + 1] = position.y + (Math.random() * 0.8); // Start higher
             this.positions[p.index * 3 + 2] = position.z + (Math.random() - 0.5) * spread;
 
             p.velocity.set(
                 (Math.random() - 0.5) * 0.05,
-                0.1 + Math.random() * 0.1,
+                0.15 + Math.random() * 0.15, // Higher upward velocity
                 (Math.random() - 0.5) * 0.05
             );
 
