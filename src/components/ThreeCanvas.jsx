@@ -854,7 +854,7 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
                         target.scale.y *= 0.8;
                         playerState.cooldown = CONFIG.IGNITE_COOLDOWN;
                         flashColor(target, 0xffaa00);
-                        AudioController.playIgnite(); // 既存の着火SE
+                        //AudioController.playIgnite(); // 既存の着火SE
                         AudioController.playFireSound(); // 燃えているSEも再生
                     }
                 }
@@ -945,5 +945,6 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
 
     return <div ref={mountRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }} />;
 }
+
 
 

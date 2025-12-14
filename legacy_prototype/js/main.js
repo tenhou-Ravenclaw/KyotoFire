@@ -152,7 +152,7 @@ function handleP2Action(target) {
     target.userData.heat = CONFIG.HEAT_THRESHOLD + 10; // Instantly ignite
     State.p2.cooldown = State.p2.maxCooldown;
     flashColor(target, 0xffaa00);
-    Audio.playIgnite();
+    //Audio.playIgnite();
 }
 
 function flashColor(mesh, hex) {
