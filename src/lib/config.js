@@ -23,3 +23,4 @@ export const CONFIG = {
     CITY_OFFSET_Y: 0
 };
 
+
