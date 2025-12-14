@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ThreeCanvas from '../components/ThreeCanvas';
 import GameUI from '../components/GameUI';
-import { AudioController } from '../lib/audio';
 
 export default function Home() {
   const router = useRouter();
@@ -29,9 +28,6 @@ export default function Home() {
   const handleGameEnd = (winner) => {
     setIsPlaying(false);
     setResult(winner);
-    
-    // ローカル対戦の結果発表時は必ずファンファーレを流す
-    AudioController.playFanfare();
   };
 
   const handleLoadProgress = (percent) => {
