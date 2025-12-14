@@ -16,6 +16,7 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
     const isInitialized = useRef(false);
     const buildingsRef = useRef([]);
     const fireParticlesRef = useRef(null);
+    const isPlayingRef = useRef(isPlaying);
     
     useEffect(() => {
         if (!mountRef.current || isInitialized.current) return;
@@ -829,7 +830,7 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
                 const target = intersects[0].object;
                 const data = target.userData;
                 
-                if (GameState.phase === 'BATTLE' && !data.isBurnt) {
+                if (isPlayingRef.current && GameState.phase === 'BATTLE' && !data.isBurnt) {
                     // Use playerId from props (for battle mode) or determine from click (for local mode)
                     const currentPlayer = roomId ? `P${playerId}` : ((e.button === 0 && !e.shiftKey) ? 'P1' : 'P2');
                     
@@ -907,6 +908,7 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
 
     // Watch isPlaying and reset game when it changes to true
     useEffect(() => {
+        isPlayingRef.current = isPlaying;
         if (isPlaying && buildingsRef.current.length > 0) {
             // Reset all buildings
             buildingsRef.current.forEach(building => {

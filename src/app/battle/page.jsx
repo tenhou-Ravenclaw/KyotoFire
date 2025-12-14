@@ -12,7 +12,7 @@ export default function BattlePage() {
     const router = useRouter();
     const roomId = searchParams.get('room');
     const playerIdParam = searchParams.get('player');
-    const playerId = playerIdParam || '1';
+    const playerId = playerIdParam || null; // playerIdが未指定の場合はnull
 
     const [isPlaying, setIsPlaying] = useState(false);
     const [result, setResult] = useState(null);
@@ -20,58 +20,102 @@ export default function BattlePage() {
     const [isLoaded, setIsLoaded] = useState(false);
     const [opponentResults, setOpponentResults] = useState({});
     const [allPlayersReady, setAllPlayersReady] = useState(false);
+    const [pendingPlayers, setPendingPlayers] = useState([]);
+    const [isHost, setIsHost] = useState(false);
+    const [assignedPlayerId, setAssignedPlayerId] = useState(null);
 
-    // ルームIDとプレイヤーIDの検証
+    // ルームIDの検証と待合画面の処理
     useEffect(() => {
         if (!roomId) {
             router.push('/battle/create');
             return;
         }
 
-        // playerIdが5以上の場合、または満員の場合に弾く
+        // playerIdが未指定の場合、待合画面モード
+        if (!playerId) {
+            // 自分のセッションIDを取得
+            const mySessionId = localStorage.getItem(`battle_session_${roomId}`);
+            const hostSessionId = localStorage.getItem(`battle_host_${roomId}`);
+
+            // ホストかどうかを判定
+            setIsHost(mySessionId === hostSessionId);
+
+            // 参加者リストを更新
+            const updatePendingPlayers = () => {
+                const pendingKey = `battle_pending_${roomId}`;
+                const pendingData = localStorage.getItem(pendingKey);
+                let players = [];
+
+                if (pendingData) {
+                    try {
+                        players = JSON.parse(pendingData);
+                        // 古い参加者（5分以上経過）を削除
+                        const now = Date.now();
+                        players = players.filter(p => now - p.timestamp < 5 * 60 * 1000);
+                        // 更新されたリストを保存
+                        if (players.length !== JSON.parse(pendingData).length) {
+                            localStorage.setItem(pendingKey, JSON.stringify(players));
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse pending data:', e);
+                        players = [];
+                    }
+                }
+                setPendingPlayers(players);
+            };
+
+            updatePendingPlayers();
+            const interval = setInterval(updatePendingPlayers, 1000);
+
+            return () => clearInterval(interval);
+        }
+
+        // playerIdが指定されている場合、通常のゲームモード
         const playerIdNum = parseInt(playerId);
         if (playerIdNum > 4) {
             alert('このルームは満員です（最大4人）');
             router.push('/battle/join');
             return;
         }
+    }, [roomId, playerId, router]);
 
-        // 既存のプレイヤー数を確認
-        const existingPlayers = [];
-        for (let i = 1; i <= 4; i++) {
-            // 結果をチェック
-            const result = localStorage.getItem(`battle_result_${roomId}_player_${i}`);
-            if (result) {
-                try {
-                    const data = JSON.parse(result);
-                    if (Date.now() - data.timestamp < 10 * 60 * 1000) {
-                        existingPlayers.push(i);
-                        continue;
+    // 割り当てられたIDを確認（待合画面モード）
+    useEffect(() => {
+        if (!roomId || playerId) return; // playerIdが既にある場合はスキップ
+
+        const checkAssignedId = () => {
+            const mySessionId = localStorage.getItem(`battle_session_${roomId}`);
+            if (!mySessionId) return;
+
+            // 割り当てられたIDを確認
+            for (let i = 1; i <= 4; i++) {
+                const assigned = localStorage.getItem(`battle_assigned_${roomId}_player_${i}`);
+                if (assigned) {
+                    try {
+                        const data = JSON.parse(assigned);
+                        if (data.sessionId === mySessionId) {
+                            // 自分のIDが割り当てられた
+                            setAssignedPlayerId(i.toString());
+                            // URLを更新してゲーム画面に遷移
+                            router.replace(`/battle?room=${roomId}&player=${i}`);
+                            return;
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse assigned data:', e);
                     }
-                } catch (e) {
-                    console.error('Failed to parse result:', e);
                 }
             }
+        };
 
-            // 開始フラグをチェック
-            const startFlag = localStorage.getItem(`battle_start_${roomId}_player_${i}`);
-            if (startFlag === 'true') {
-                existingPlayers.push(i);
-            }
-        }
+        checkAssignedId();
+        const interval = setInterval(checkAssignedId, 500);
 
-        // 現在のプレイヤーが既存のプレイヤーリストに含まれていない場合
-        // かつ、既に4人参加している場合は弾く
-        if (!existingPlayers.includes(playerIdNum) && existingPlayers.length >= 4) {
-            alert('このルームは満員です（最大4人）');
-            router.push('/battle/join');
-            return;
-        }
+        return () => clearInterval(interval);
     }, [roomId, playerId, router]);
 
     // 他のプレイヤーの結果を監視
     useEffect(() => {
-        if (!roomId) return;
+        if (!roomId || !playerId) return;
 
         const checkOpponentResults = () => {
             const results = {};
@@ -102,7 +146,7 @@ export default function BattlePage() {
 
     // 全プレイヤーの準備状況を確認し、全員が準備完了になったら開始時刻を設定
     useEffect(() => {
-        if (!roomId || !isLoaded) return;
+        if (!roomId || !isLoaded || !playerId) return;
 
         const checkAllReady = () => {
             const startFlags = {};
@@ -148,20 +192,84 @@ export default function BattlePage() {
     }, [roomId, isLoaded, isPlaying]);
 
     const handleStart = () => {
-        if (!isLoaded || !roomId) return;
+        if (!roomId) return;
 
-        // 開始フラグを設定（実際の開始は全員が準備完了になるまで待つ）
-        localStorage.setItem(`battle_start_${roomId}_player_${playerId}`, 'true');
+        // 待合画面モードの場合、IDを割り当てる（isLoadedのチェックは不要）
+        if (!playerId && isHost) {
+            // 参加者リストを取得
+            const pendingKey = `battle_pending_${roomId}`;
+            const pendingData = localStorage.getItem(pendingKey);
+            if (!pendingData) return;
 
-        // SE再生フラグをクリア（新しいゲーム開始時）
-        localStorage.removeItem(`battle_sound_played_${roomId}_player_${playerId}`);
+            let players = [];
+            try {
+                players = JSON.parse(pendingData);
+                // 古い参加者を削除
+                const now = Date.now();
+                players = players.filter(p => now - p.timestamp < 5 * 60 * 1000);
+            } catch (e) {
+                console.error('Failed to parse pending data:', e);
+                return;
+            }
 
-        // 既存の開始時刻をクリアしない（既に設定されている場合はそのまま使用）
+            // 参加者にID（1-4）を割り当て
+            const maxPlayers = Math.min(players.length, 4);
+            for (let i = 0; i < maxPlayers; i++) {
+                const player = players[i];
+                const assignedId = (i + 1).toString();
+
+                const assignedData = {
+                    sessionId: player.sessionId,
+                    playerId: assignedId,
+                    timestamp: Date.now()
+                };
+
+                localStorage.setItem(`battle_assigned_${roomId}_player_${assignedId}`, JSON.stringify(assignedData));
+
+                // 各プレイヤーに開始フラグを設定（全員が準備完了として扱う）
+                localStorage.setItem(`battle_start_${roomId}_player_${assignedId}`, 'true');
+            }
+
+            // 開始時刻を設定（現在時刻から3秒後）
+            const startTimeValue = Date.now() + 3000; // 3秒のカウントダウン
+            localStorage.setItem(`battle_start_time_${roomId}`, startTimeValue.toString());
+
+            // 自分のIDを確認してゲーム画面に遷移
+            const mySessionId = localStorage.getItem(`battle_session_${roomId}`);
+            if (mySessionId) {
+                for (let i = 1; i <= maxPlayers; i++) {
+                    const assigned = localStorage.getItem(`battle_assigned_${roomId}_player_${i}`);
+                    if (assigned) {
+                        try {
+                            const data = JSON.parse(assigned);
+                            if (data.sessionId === mySessionId) {
+                                router.replace(`/battle?room=${roomId}&player=${i}`);
+                                return;
+                            }
+                        } catch (e) {
+                            console.error('Failed to parse assigned data:', e);
+                        }
+                    }
+                }
+            }
+
+            return;
+        }
+
+        // 通常モードの場合、開始フラグを設定（isLoadedをチェック）
+        if (playerId) {
+            if (!isLoaded) return;
+            localStorage.setItem(`battle_start_${roomId}_player_${playerId}`, 'true');
+            localStorage.removeItem(`battle_sound_played_${roomId}_player_${playerId}`);
+        }
     };
 
     const handleGameEnd = (winner) => {
         // 既に結果が設定されている場合は処理をスキップ（重複実行を防ぐ）
         if (result !== null) return;
+
+        // playerIdが未指定の場合はスキップ（待合画面モード）
+        if (!playerId) return;
 
         setIsPlaying(false);
         setResult(winner);
@@ -238,7 +346,7 @@ export default function BattlePage() {
 
     // 最終結果の計算
     const calculateFinalResult = () => {
-        if (!roomId) return null;
+        if (!roomId || !playerId) return null;
 
         // 現在のプレイヤーのスコア（延焼を含めた率）
         // Use P1 slot for odd playerIds (1, 3), P2 slot for even playerIds (2, 4)
@@ -285,6 +393,91 @@ export default function BattlePage() {
 
     const finalResult = calculateFinalResult();
 
+    // 待合画面モード
+    if (!playerId) {
+        return (
+            <main style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', backgroundColor: '#000', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: '#fff' }}>
+                <div style={{
+                    background: '#1a1a1a',
+                    padding: '2rem',
+                    borderRadius: '12px',
+                    minWidth: '500px',
+                    textAlign: 'center'
+                }}>
+                    <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '1rem' }}>
+                        待合室
+                    </h1>
+                    <div style={{ marginBottom: '1.5rem', color: '#888' }}>
+                        ルームID: <span style={{ color: '#fff', fontWeight: 'bold', letterSpacing: '0.1em' }}>{roomId}</span>
+                    </div>
+
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <div style={{ fontSize: '1.1rem', marginBottom: '0.5rem', color: '#aaa' }}>
+                            参加者 ({pendingPlayers.length}/4)
+                        </div>
+                        <div style={{ background: '#2a2a2a', padding: '1rem', borderRadius: '8px', minHeight: '100px' }}>
+                            {pendingPlayers.length === 0 ? (
+                                <div style={{ color: '#666' }}>参加者を待っています...</div>
+                            ) : (
+                                pendingPlayers.map((player, index) => (
+                                    <div key={player.sessionId} style={{
+                                        padding: '0.5rem',
+                                        marginBottom: '0.5rem',
+                                        background: player.isHost ? '#3b82f6' : '#333',
+                                        borderRadius: '4px',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center'
+                                    }}>
+                                        <span>
+                                            {player.isHost ? '👑 ' : ''}プレイヤー {index + 1}
+                                        </span>
+                                        {assignedPlayerId && assignedPlayerId === (index + 1).toString() && (
+                                            <span style={{ color: '#10b981', fontWeight: 'bold' }}>✓ 割り当て済み</span>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    {isHost ? (
+                        <div>
+                            <button
+                                onClick={handleStart}
+                                disabled={pendingPlayers.length < 2}
+                                style={{
+                                    width: '100%',
+                                    padding: '1rem',
+                                    fontSize: '1.25rem',
+                                    fontWeight: 'bold',
+                                    background: pendingPlayers.length < 2 ? '#666' : '#ef4444',
+                                    color: '#fff',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: pendingPlayers.length < 2 ? 'not-allowed' : 'pointer',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                {pendingPlayers.length < 2 ? '参加者を待っています...' : 'GAME START'}
+                            </button>
+                            {pendingPlayers.length < 2 && (
+                                <div style={{ marginTop: '0.5rem', color: '#888', fontSize: '0.9rem' }}>
+                                    少なくとも2人必要です
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div style={{ color: '#888', fontSize: '1rem' }}>
+                            ホストがゲームを開始するのを待っています...
+                        </div>
+                    )}
+                </div>
+            </main>
+        );
+    }
+
+    // 通常のゲーム画面
     return (
         <main style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', backgroundColor: '#000' }}>
             {/* プレイヤーID表示 */}

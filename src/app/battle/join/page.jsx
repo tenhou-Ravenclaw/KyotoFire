@@ -17,51 +17,64 @@ export default function JoinRoomPage() {
         // ルームIDを正規化（大文字に変換）
         const normalizedRoomId = roomId.trim().toUpperCase();
 
-        // 利用可能なプレイヤーIDを取得
-        const playerId = getAvailablePlayerId(normalizedRoomId);
+        // 参加者数を確認（最大4人）
+        const pendingKey = `battle_pending_${normalizedRoomId}`;
+        const pendingData = localStorage.getItem(pendingKey);
+        let pendingPlayers = [];
 
-        if (playerId === null) {
+        if (pendingData) {
+            try {
+                pendingPlayers = JSON.parse(pendingData);
+                // 古い参加者（5分以上経過）を削除
+                const now = Date.now();
+                pendingPlayers = pendingPlayers.filter(p => now - p.timestamp < 5 * 60 * 1000);
+            } catch (e) {
+                console.error('Failed to parse pending data:', e);
+                pendingPlayers = [];
+            }
+        }
+
+        // 既に割り当てられたプレイヤー数を確認
+        let assignedCount = 0;
+        for (let i = 1; i <= 4; i++) {
+            const assigned = localStorage.getItem(`battle_assigned_${normalizedRoomId}_player_${i}`);
+            if (assigned) {
+                try {
+                    const data = JSON.parse(assigned);
+                    // 最近の割り当て（10分以内）があればカウント
+                    if (Date.now() - data.timestamp < 10 * 60 * 1000) {
+                        assignedCount++;
+                    }
+                } catch (e) {
+                    console.error('Failed to parse assigned data:', e);
+                }
+            }
+        }
+
+        // 満員チェック（割り当て済み + 待機中 = 最大4人）
+        if (assignedCount + pendingPlayers.length >= 4) {
             setError('このルームは満員です（最大4人）');
             return;
         }
 
-        // 対戦ページに遷移
-        router.push(`/battle?room=${normalizedRoomId}&player=${playerId}`);
-    };
+        // 一意のセッションIDを生成
+        const sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-    const getAvailablePlayerId = (roomId) => {
-        // 既存のプレイヤーを確認（結果と開始フラグの両方をチェック）
-        const existingPlayers = [];
-        for (let i = 1; i <= 4; i++) {
-            // 結果をチェック
-            const result = localStorage.getItem(`battle_result_${roomId}_player_${i}`);
-            if (result) {
-                try {
-                    const data = JSON.parse(result);
-                    // 最近の結果（10分以内）があれば、そのプレイヤーは参加中とみなす
-                    if (Date.now() - data.timestamp < 10 * 60 * 1000) {
-                        existingPlayers.push(i);
-                        continue;
-                    }
-                } catch (e) {
-                    console.error('Failed to parse result:', e);
-                }
-            }
+        // 参加者情報を追加
+        const newPlayer = {
+            sessionId: sessionId,
+            timestamp: Date.now()
+        };
+        pendingPlayers.push(newPlayer);
 
-            // 開始フラグをチェック
-            const startFlag = localStorage.getItem(`battle_start_${roomId}_player_${i}`);
-            if (startFlag === 'true') {
-                existingPlayers.push(i);
-            }
-        }
+        // localStorageに保存
+        localStorage.setItem(pendingKey, JSON.stringify(pendingPlayers));
 
-        // 空いているプレイヤーIDを返す
-        for (let i = 1; i <= 4; i++) {
-            if (!existingPlayers.includes(i)) {
-                return i;
-            }
-        }
-        return null; // 満員（最大4人）
+        // 自分のセッションIDを保存（後で自分のIDを確認するため）
+        localStorage.setItem(`battle_session_${normalizedRoomId}`, sessionId);
+
+        // 対戦ページに遷移（playerIdなし）
+        router.push(`/battle?room=${normalizedRoomId}`);
     };
 
     return (
