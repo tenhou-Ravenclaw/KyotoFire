@@ -33,8 +33,8 @@ export default function BattlePage() {
 
         // playerIdが未指定の場合、待合画面モード
         if (!playerId) {
-            // 自分のセッションIDを取得
-            const mySessionId = localStorage.getItem(`battle_session_${roomId}`);
+            // 自分のセッションIDを取得（sessionStorageから）
+            const mySessionId = sessionStorage.getItem(`battle_session_${roomId}`);
             const hostSessionId = localStorage.getItem(`battle_host_${roomId}`);
 
             // ホストかどうかを判定
@@ -84,7 +84,7 @@ export default function BattlePage() {
         if (!roomId || playerId) return; // playerIdが既にある場合はスキップ
 
         const checkAssignedId = () => {
-            const mySessionId = localStorage.getItem(`battle_session_${roomId}`);
+            const mySessionId = sessionStorage.getItem(`battle_session_${roomId}`);
             if (!mySessionId) return;
 
             // 割り当てられたIDを確認
@@ -235,7 +235,7 @@ export default function BattlePage() {
             localStorage.setItem(`battle_start_time_${roomId}`, startTimeValue.toString());
 
             // 自分のIDを確認してゲーム画面に遷移
-            const mySessionId = localStorage.getItem(`battle_session_${roomId}`);
+            const mySessionId = sessionStorage.getItem(`battle_session_${roomId}`);
             if (mySessionId) {
                 for (let i = 1; i <= maxPlayers; i++) {
                     const assigned = localStorage.getItem(`battle_assigned_${roomId}_player_${i}`);

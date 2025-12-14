@@ -70,8 +70,8 @@ export default function JoinRoomPage() {
         // localStorageに保存
         localStorage.setItem(pendingKey, JSON.stringify(pendingPlayers));
 
-        // 自分のセッションIDを保存（後で自分のIDを確認するため）
-        localStorage.setItem(`battle_session_${normalizedRoomId}`, sessionId);
+        // 自分のセッションIDをsessionStorageに保存（タブごとに独立）
+        sessionStorage.setItem(`battle_session_${normalizedRoomId}`, sessionId);
 
         // 対戦ページに遷移（playerIdなし）
         router.push(`/battle?room=${normalizedRoomId}`);

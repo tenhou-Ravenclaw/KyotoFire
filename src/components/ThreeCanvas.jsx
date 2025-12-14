@@ -946,3 +946,4 @@ export default function ThreeCanvas({ isPlaying, onUpdate, onGameEnd, onLoadProg
     return <div ref={mountRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }} />;
 }
 
+

@@ -20,8 +20,7 @@ export default function CreateRoomPage() {
     if (!roomId) return;
     setIsCreating(true);
     
-    // ホストとして参加者情報を追加
-    const pendingKey = `battle_pending_${roomId}`;
+    // セッションIDを生成
     const sessionId = `host_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     
     const hostPlayer = {
@@ -30,9 +29,13 @@ export default function CreateRoomPage() {
       isHost: true
     };
     
+    // ホストとして参加者情報を追加
+    const pendingKey = `battle_pending_${roomId}`;
     localStorage.setItem(pendingKey, JSON.stringify([hostPlayer]));
-    localStorage.setItem(`battle_session_${roomId}`, sessionId);
-    localStorage.setItem(`battle_host_${roomId}`, sessionId); // ホストのセッションIDを保存
+    
+    // セッションIDをsessionStorageに保存（タブごとに独立）
+    sessionStorage.setItem(`battle_session_${roomId}`, sessionId);
+    localStorage.setItem(`battle_host_${roomId}`, sessionId);
     
     // 対戦ページに遷移（playerIdなし、待合画面に遷移）
     router.push(`/battle?room=${roomId}`);

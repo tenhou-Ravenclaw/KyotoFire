@@ -22,3 +22,4 @@ export const CONFIG = {
     CITY_SCALE: 0.5,        // PLATEAU data is in meters, scale down
     CITY_OFFSET_Y: 0
 };
+
