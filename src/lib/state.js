@@ -4,28 +4,32 @@ export const GameState = {
     phase: 'MENU', // MENU, SETUP, BATTLE, FINISH
     timer: 0,
     p1: {
-        budget: CONFIG.P1_INITIAL_BUDGET,
-        incomeRate: CONFIG.P1_INCOME_BASE
+        cooldown: 0,
+        burntCount: 0, // Number of buildings burnt by P1 (including spread fires)
+        burntPercentage: 0 // Percentage of total buildings burnt by P1
     },
     p2: {
         cooldown: 0,
-        maxCooldown: CONFIG.P2_COOLDOWN_BASE
+        burntCount: 0, // Number of buildings burnt by P2 (including spread fires)
+        burntPercentage: 0 // Percentage of total buildings burnt by P2
     },
     stats: {
         totalBuildings: 0,
-        burntBuildings: 0,
-        damagePercent: 0
+        totalBurntBuildings: 0
     },
 
     reset() {
         this.phase = 'SETUP';
         this.timer = CONFIG.SETUP_TIME;
-        this.p1.budget = CONFIG.P1_INITIAL_BUDGET;
-        this.p1.incomeRate = CONFIG.P1_INCOME_BASE;
+        this.p1.cooldown = 0;
+        this.p1.burntCount = 0;
+        this.p1.burntPercentage = 0;
         this.p2.cooldown = 0;
-        this.p2.maxCooldown = CONFIG.P2_COOLDOWN_BASE;
-        this.stats.burntBuildings = 0;
-        this.stats.damagePercent = 0;
+        this.p2.burntCount = 0;
+        this.p2.burntPercentage = 0;
+        this.stats.totalBurntBuildings = 0;
     }
 };
+
+
 
